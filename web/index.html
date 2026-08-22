@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>맞다톤 전광판</title>
+<meta name="description" content="맞다톤 AI 심사 에이전트 채점 결과 전광판">
+<meta name="theme-color" content="#0f172a">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<main class="app-main">
+  <div class="board">
+
+    <header class="board-header">
+      <h1>맞다톤 <span class="accent">전광판</span></h1>
+      <div class="board-status">
+        <span class="conn-dot conn-up" id="conn-dot"></span>
+        <span id="conn-text">LIVE</span>
+      </div>
+    </header>
+
+    <p class="board-error" id="board-error" hidden></p>
+
+    <table class="board-table">
+      <thead>
+        <tr>
+          <th class="col-rank">#</th>
+          <th class="col-team">Team</th>
+          <th class="col-app">App</th>
+          <th class="col-attempts">Attempts</th>
+          <th class="col-submitted">Last submission</th>
+          <th class="col-status">Status</th>
+          <th class="col-score">Score</th>
+        </tr>
+      </thead>
+      <tbody id="board-body">
+        <tr><td colspan="7" class="board-empty">불러오는 중…</td></tr>
+      </tbody>
+    </table>
+
+    <p class="board-foot">
+      행을 누르면 항목별 점수와 <strong>부족한 점 · 개선 방안</strong>이 펼쳐집니다.
+      모든 점수는 AI가 자동 생성한 평가이며, 최종 순위는 사무국 검토로 확정됩니다.
+    </p>
+
+  </div>
+</main>
+
+<script src="./config.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

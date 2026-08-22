@@ -1,0 +1,51 @@
+name: Deploy Board
+
+# 전광판(web/)을 GitHub Pages 로 배포한다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/deploy-board.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 항상 최신 것 하나만 유효하다. 진행 중인 배포는 취소하지 않는다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 전광판이 바라볼 저장소를 실제 배포 대상에 맞춰 주입한다.
+      - name: Inject repository config
+        run: |
+          cat > web/config.js <<EOF
+          window.MATDATHON_CONFIG = {
+            owner: '${{ github.repository_owner }}',
+            repo: '${{ github.event.repository.name }}',
+            refreshMs: 30000,
+          };
+          EOF
+          cat web/config.js
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,355 @@
+/*
+    맞다톤 전광판 — Tournament Dark 팔레트.
+
+    상태 배지는 의도적으로 적/녹 대비축을 피한다. 색상(주황/파랑/노랑/장미)과
+    명도 차이만으로 EVAL / DONE / FAIL 을 구분할 수 있어 적록색약에서도
+    판별 가능하며, ✓ / ⚠ 글리프와 스피너가 색에 의존하지 않는 보조 신호를 준다.
+*/
+:root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface-2: #16223c;
+    --border: #2b3a55;
+    --border-soft: #1d2942;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --text-dim: #7e93b4;
+    --accent: #fb923c;
+    --status-eval: #facc15;
+    --status-eval-bg: #3a2f0a;
+    --status-done: #38bdf8;
+    --status-done-bg: #0c2a3d;
+    --status-fail: #f43f5e;
+    --status-fail-bg: #3a1020;
+    --conn-up: #38bdf8;
+    --conn-down: #f43f5e;
+    color-scheme: dark;
+}
+
+html, body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+}
+
+.app-main { min-height: 100vh; }
+
+.board {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 2rem;
+    color: var(--text);
+}
+
+/* ---------- 헤더 ---------- */
+.board-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.75rem;
+}
+
+.board-header h1 {
+    font-size: 2.4rem;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.board-header .accent { color: var(--accent); }
+
+.board-status {
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.conn-dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.conn-up   { background: var(--conn-up);   box-shadow: 0 0 8px var(--conn-up); }
+.conn-down { background: var(--conn-down); box-shadow: 0 0 8px var(--conn-down); }
+
+.board-error {
+    background: var(--status-fail-bg);
+    color: #ffd5d5;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* ---------- 표 ---------- */
+.board-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 1.4rem;
+}
+
+.board-table thead th {
+    text-align: left;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.board-table .col-rank      { width: 4%;  text-align: center; }
+.board-table .col-attempts  { width: 9%;  text-align: center; }
+.board-table .col-submitted { width: 13%; }
+.board-table .col-status    { width: 14%; }
+.board-table .col-score     { width: 9%;  text-align: right; font-variant-numeric: tabular-nums; }
+
+.board-row {
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.board-row td {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.board-row:hover { background: var(--surface-2); }
+.board-row.is-open { background: #1a2742; }
+.board-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.board-row .col-rank     { text-align: center; font-weight: 800; color: var(--accent); }
+.board-row .col-team     { font-weight: 700; }
+.board-row .col-attempts { text-align: center; }
+.board-row .col-score    { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.board-empty,
+.board-row td.board-empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 2rem;
+    font-size: 1.1rem;
+}
+
+.row-caret {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-right: 0.4rem;
+    display: inline-block;
+    transition: transform 0.15s ease;
+}
+
+.board-row.is-open .row-caret { transform: rotate(90deg); color: var(--accent); }
+
+/* ---------- 배지 ---------- */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 1rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-eval { background: var(--status-eval-bg); color: var(--status-eval); }
+.badge-done { background: var(--status-done-bg); color: var(--status-done); }
+.badge-fail { background: var(--status-fail-bg); color: var(--status-fail); }
+
+.badge-glyph { font-size: 0.9rem; line-height: 1; }
+
+.spinner {
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid var(--status-eval);
+    border-top-color: transparent;
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- 상세 (펼침) ---------- */
+.board-detail-row td {
+    background: #0e1729;
+    padding: 1rem 1.5rem 1.5rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.detail-final {
+    background: linear-gradient(135deg, #16223d 0%, #1a2b4a 100%);
+    border: 1px solid #2d4373;
+    border-left: 3px solid var(--accent);
+    border-radius: 0.6rem;
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 0.85rem;
+}
+
+.detail-final-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.35rem;
+}
+
+.detail-final-text {
+    margin: 0;
+    font-size: 0.98rem;
+    color: #d6e3f7;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin: 0 0 0.85rem;
+}
+
+.detail-meta a { color: var(--status-done); }
+
+.detail-warn {
+    background: var(--status-fail-bg);
+    border-left: 3px solid var(--status-fail);
+    border-radius: 0.6rem;
+    padding: 0.75rem 1.1rem;
+    margin-bottom: 0.85rem;
+    font-size: 0.95rem;
+    color: #ffd5d5;
+}
+
+.detail-section-title {
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 1.2rem 0 0.6rem;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 0.85rem;
+}
+
+.detail-card {
+    background: var(--surface-2);
+    border: 1px solid #243353;
+    border-radius: 0.6rem;
+    padding: 0.85rem 1rem;
+}
+
+/* 점수가 낮을수록 눈에 띄게 — 어디가 부족한지 즉시 보이도록 */
+.detail-card.is-weak { border-left: 3px solid var(--status-fail); }
+.detail-card.is-mid  { border-left: 3px solid var(--status-eval); }
+.detail-card.is-good { border-left: 3px solid var(--status-done); }
+
+.detail-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+    gap: 0.75rem;
+}
+
+.detail-criteria { font-weight: 700; font-size: 1rem; color: #cfe0f7; }
+.detail-score { font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.detail-report { margin: 0; font-size: 0.95rem; color: #aebfda; line-height: 1.45; }
+.detail-loading { color: var(--text-dim); font-size: 1rem; }
+
+.detail-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: #243353;
+    margin: 0.5rem 0 0.6rem;
+    overflow: hidden;
+}
+
+.detail-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+.detail-loss {
+    font-size: 0.8rem;
+    color: var(--status-eval);
+    margin-top: 0.5rem;
+}
+
+/* 강점 / 개선 방안 */
+.detail-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.detail-list {
+    background: var(--surface-2);
+    border: 1px solid #243353;
+    border-radius: 0.6rem;
+    padding: 0.85rem 1rem;
+}
+
+.detail-list.is-improve { border-left: 3px solid var(--status-eval); }
+.detail-list.is-strength { border-left: 3px solid var(--status-done); }
+
+.detail-list h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+    color: #cfe0f7;
+}
+
+.detail-list ul { margin: 0; padding-left: 1.15rem; }
+
+.detail-list li {
+    font-size: 0.93rem;
+    color: #aebfda;
+    line-height: 1.5;
+    margin-bottom: 0.35rem;
+}
+
+.board-foot {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-soft);
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.board-foot strong { color: var(--text-muted); }
+
+@media (max-width: 900px) {
+    .board { padding: 1rem; }
+    .board-table { font-size: 1rem; }
+    .board-header h1 { font-size: 1.6rem; }
+    .board-table .col-attempts,
+    .board-table .col-submitted { display: none; }
+    .board-row .col-attempts,
+    .board-row .col-submitted { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+    .board-row, .row-caret { transition: none; }
+}
