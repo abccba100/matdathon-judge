@@ -102,9 +102,16 @@
     return getJSON(API + '/issues?state=all&labels=submission&per_page=100&sort=created&direction=desc');
   }
 
+  function cacheKey(issue) {
+    return issue.number + '@' + (issue.updated_at || '');
+  }
+
   // 결과 코멘트에 심어둔 JSON 을 되읽는다. 실패하면 null.
-  function loadJudgement(number) {
-    if (cache[number] !== undefined) return Promise.resolve(cache[number]);
+  // 재심사로 이슈가 갱신되면 캐시가 자동으로 무효화되도록 updated_at 을 키에 포함한다.
+  function loadJudgement(issue) {
+    var number = issue.number;
+    var key = cacheKey(issue);
+    if (cache[key] !== undefined) return Promise.resolve(cache[key]);
     return getJSON(API + '/issues/' + number + '/comments?per_page=100')
       .then(function (comments) {
         var found = null;
@@ -115,7 +122,7 @@
             if (found) break;
           }
         }
-        cache[number] = found;
+        cache[key] = found;
         return found;
       })
       .catch(function () { return null; });
@@ -182,7 +189,7 @@
   function buildRow(entry, rank) {
     var issue = entry.latest;
     var st = statusOf(issue);
-    var judgement = cache[issue.number];
+    var judgement = cache[cacheKey(issue)];
 
     var tr = el('tr', 'board-row' + (openRows[issue.number] ? ' is-open' : ''));
     tr.tabIndex = 0;
@@ -222,7 +229,7 @@
         refreshView();
       } else {
         openRows[issue.number] = true;
-        loadJudgement(issue.number).then(refreshView);
+        loadJudgement(issue).then(refreshView);
         refreshView();
       }
     }
@@ -378,10 +385,10 @@
         // 심사가 끝난 항목은 점수를 미리 받아 순위를 정확히 매긴다.
         var pending = lastIssues
           .filter(function (i) {
-            return labels(i).indexOf('judged') !== -1 && cache[i.number] === undefined;
+            return labels(i).indexOf('judged') !== -1 && cache[cacheKey(i)] === undefined;
           })
           .slice(0, 10)
-          .map(function (i) { return loadJudgement(i.number); });
+          .map(function (i) { return loadJudgement(i); });
 
         if (pending.length) return Promise.all(pending).then(refreshView);
         refreshView();
