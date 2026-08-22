@@ -657,6 +657,8 @@ jobs:
               block("제출자가 이슈에 적은 앱 세부 정보", "APP_DETAILS",
                     (os.environ.get("APP_DETAILS", "") or "")[:MAX["details"]]),
               "위 심사 기준의 7개 항목을 지정된 JSON 스키마로 채점하십시오.",
+              "응답은 '{' 로 시작해 '}' 로 끝나는 JSON 객체 하나여야 합니다. "
+              "인사말, 요약, 코드펜스, 도구 사용 설명 등 JSON 이외의 텍스트를 절대 출력하지 마십시오.",
           ])
 
           pathlib.Path("system-prompt.txt").write_text(system, encoding="utf-8")
@@ -769,6 +771,17 @@ jobs:
           fi
 
       # ----------------------------------------------------------------------
+      # J5-b. 파싱 실패를 사후 진단할 수 있도록 원본 응답을 아티팩트로 남긴다.
+      # ----------------------------------------------------------------------
+      - name: Upload raw AI response
+        if: always() && hashFiles('ai-response.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-response-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ai-response.txt
+          retention-days: 7
+
+      # ----------------------------------------------------------------------
       # J6. 응답 파싱 + 가중치 총점 계산. 점수 산술은 모델이 아니라 워크플로가
       #     결정론적으로 수행한다(환각 방지). 배포 URL이 응답하지 않으면
       #     이슈 양식 규정대로 전 항목을 1점으로 강제한다.
@@ -802,22 +815,73 @@ jobs:
           raw = response_path.read_text(encoding="utf-8", errors="replace") \
               if response_path.exists() else ""
 
+          def usable(obj) -> bool:
+              return isinstance(obj, dict) and isinstance(obj.get("scores"), list) and obj["scores"]
+
+          def balanced_objects(text: str):
+              """따옴표/이스케이프를 인식하며 최상위 { ... } 후보를 모두 뽑아낸다."""
+              depth = 0
+              start = -1
+              in_str = False
+              esc = False
+              for i, ch in enumerate(text):
+                  if in_str:
+                      if esc:
+                          esc = False
+                      elif ch == "\\":
+                          esc = True
+                      elif ch == '"':
+                          in_str = False
+                      continue
+                  if ch == '"':
+                      in_str = True
+                  elif ch == "{":
+                      if depth == 0:
+                          start = i
+                      depth += 1
+                  elif ch == "}":
+                      if depth:
+                          depth -= 1
+                          if depth == 0 and start != -1:
+                              yield text[start:i + 1]
+                              start = -1
+
           def extract_json(text: str):
               text = text.strip()
               if not text:
                   return None
-              fenced = re.search(r"```(?:json)?\s*(.*?)```", text, flags=re.S)
-              if fenced:
-                  text = fenced.group(1).strip()
-              start, end = text.find("{"), text.rfind("}")
-              if start == -1 or end <= start:
-                  return None
-              try:
-                  return json.loads(text[start:end + 1])
-              except json.JSONDecodeError:
-                  return None
+              candidates = []
+              # 1) 전체가 곧바로 JSON인 경우
+              candidates.append(text)
+              # 2) 코드펜스 블록 (여러 개일 수 있으므로 모두 시도)
+              candidates.extend(m.group(1).strip() for m in
+                                re.finditer(r"```(?:json|JSON)?\s*(.*?)```", text, flags=re.S))
+              # 3) 균형 잡힌 최상위 객체 후보 (뒤쪽일수록 최종 답변일 확률이 높다)
+              braced = list(balanced_objects(text))
+              candidates.extend(reversed(braced))
+
+              fallback = None
+              for cand in candidates:
+                  cand = cand.strip()
+                  if not cand.startswith("{"):
+                      inner = list(balanced_objects(cand))
+                      if not inner:
+                          continue
+                      cand = inner[-1]
+                  try:
+                      obj = json.loads(cand)
+                  except json.JSONDecodeError:
+                      continue
+                  if usable(obj):
+                      return obj
+                  if fallback is None and isinstance(obj, dict):
+                      fallback = obj
+              return fallback
 
           data = extract_json(raw) or {}
+          if not usable(data):
+              snippet = raw[:1500].replace("\n", "\\n")
+              print(f"::warning::심사 응답 파싱 실패. 앞부분 1500자: {snippet}")
           by_id = {}
           for item in data.get("scores", []) or []:
               try:
