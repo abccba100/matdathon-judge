@@ -501,6 +501,9 @@ jobs:
           fetch PRD.md
           fetch TRD.md
           fetch README.md
+          # AGENTS.md 는 필수 문서는 아니지만, 에이전트 설계·도구 호출·오케스트레이션의
+          # 직접적인 증거가 되므로 있으면 보조 자료로 함께 심사에 넣는다.
+          fetch AGENTS.md
 
       # ----------------------------------------------------------------------
       # J3. 배포 URL 실제 동작 확인 (E2E 최소 검증).
@@ -544,7 +547,7 @@ jobs:
           import os, pathlib, re, html
 
           MAX = {"PRD.md": 40000, "TRD.md": 40000, "README.md": 15000,
-                 "deployment": 20000, "details": 8000}
+                 "AGENTS.md": 15000, "deployment": 20000, "details": 8000}
 
           def read(path, limit):
               p = pathlib.Path(path)
@@ -633,6 +636,8 @@ jobs:
                     read("evidence/TRD.md", MAX["TRD.md"])),
               block("README.md (보조 자료)", "README",
                     read("evidence/README.md", MAX["README.md"])),
+              block("AGENTS.md (보조 자료 — 에이전트 설계·도구 정의)", "AGENTS",
+                    read("evidence/AGENTS.md", MAX["AGENTS.md"])),
               block("배포된 앱의 실제 응답 본문 (HTML 태그 제거)", "DEPLOYMENT",
                     deployment_text, "(응답 없음 — 앱에 접근할 수 없었습니다)"),
               block("제출자가 이슈에 적은 앱 세부 정보", "APP_DETAILS",
