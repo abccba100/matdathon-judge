@@ -761,7 +761,11 @@ jobs:
   panel:
     name: 심사 ${{ matrix.label }}
     needs: [submit, judge-evidence]
-    if: needs.judge-evidence.outputs.run_ai == 'true'
+    # submit 은 workflow_dispatch 에서 skipped 가 되므로 always() 로 연쇄 스킵을 끊는다.
+    if: >-
+      always()
+      && needs.judge-evidence.result == 'success'
+      && needs.judge-evidence.outputs.run_ai == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
