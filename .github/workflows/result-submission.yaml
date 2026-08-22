@@ -5,6 +5,32 @@ on:
     types:
       - opened
 
+  # 심사 파이프라인만 단독으로 시험 실행하기 위한 수동 트리거.
+  # 제출 검증(submit)을 건너뛰고 judge 잡만 돌린다.
+  workflow_dispatch:
+    inputs:
+      app_title:
+        description: 앱 제목
+        required: true
+        default: FocusFlow
+      repository_url:
+        description: 리포지토리 URL (루트에 PRD.md / TRD.md 필요)
+        required: true
+      commit_hash:
+        description: 커밋 해시
+        required: true
+      deployment_url:
+        description: 배포 URL
+        required: true
+      app_details:
+        description: 앱 세부 정보 (선택)
+        required: false
+        default: ''
+      issue_number:
+        description: 결과를 코멘트할 이슈 번호 (비우면 코멘트하지 않고 로그에만 출력)
+        required: false
+        default: ''
+
 permissions:
   issues: write
   contents: read
@@ -13,7 +39,9 @@ permissions:
 jobs:
   submit:
     # Only run for issues that carry the submission label (set by the issue form).
-    if: contains(github.event.issue.labels.*.name, 'submission')
+    if: >-
+      github.event_name == 'issues' &&
+      contains(github.event.issue.labels.*.name, 'submission')
     runs-on: ubuntu-latest
 
     outputs:
@@ -397,7 +425,13 @@ jobs:
   judge:
     name: AI 심사
     needs: submit
-    if: ${{ needs.submit.result == 'success' }}
+    # issues 트리거: submit이 모든 검증을 통과했을 때만.
+    # workflow_dispatch: submit이 건너뛰어지므로 곧바로 심사만 수행.
+    if: >-
+      always() && (
+        (github.event_name == 'issues' && needs.submit.result == 'success') ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
 
     permissions:
@@ -409,13 +443,13 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       OWNER: ${{ github.repository_owner }}
       REPO: ${{ github.event.repository.name }}
-      ISSUE: ${{ github.event.issue.number }}
-      AUTHOR: ${{ github.event.issue.user.login }}
-      APP_TITLE:      ${{ needs.submit.outputs.app_title }}
-      REPOSITORY_URL: ${{ needs.submit.outputs.repository_url }}
-      COMMIT_HASH:    ${{ needs.submit.outputs.commit_hash }}
-      DEPLOYMENT_URL: ${{ needs.submit.outputs.deployment_url }}
-      APP_DETAILS:    ${{ needs.submit.outputs.app_details }}
+      ISSUE: ${{ github.event.issue.number || inputs.issue_number }}
+      AUTHOR: ${{ github.event.issue.user.login || github.actor }}
+      APP_TITLE:      ${{ needs.submit.outputs.app_title      || inputs.app_title }}
+      REPOSITORY_URL: ${{ needs.submit.outputs.repository_url || inputs.repository_url }}
+      COMMIT_HASH:    ${{ needs.submit.outputs.commit_hash    || inputs.commit_hash }}
+      DEPLOYMENT_URL: ${{ needs.submit.outputs.deployment_url || inputs.deployment_url }}
+      APP_DETAILS:    ${{ needs.submit.outputs.app_details    || inputs.app_details }}
 
     steps:
       # 심사 기준 문서(judgement-criteria.md)를 읽기 위해 이 저장소를 체크아웃한다.
@@ -794,9 +828,16 @@ jobs:
       # ----------------------------------------------------------------------
       - name: Publish judgement to the issue
         run: |
+          cat judgement.md >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$ISSUE" ]; then
+              echo "이슈 번호가 없어 코멘트를 건너뜁니다 (수동 실행). 결과는 잡 요약을 확인하세요."
+              exit 0
+          fi
+
           # 라벨이 아직 없을 수 있으므로 먼저 확보한다(이미 있으면 무시).
           gh label create "judged" --repo "$OWNER/$REPO" \
-              --color "0E8A16" --description "AI 심사 완료" 2>/dev/null || true
+              --color "5319E7" --description "AI 심사 완료" 2>/dev/null || true
           gh label create "needs-review" --repo "$OWNER/$REPO" \
               --color "D93F0B" --description "AI 심사 실패 — 사무국 확인 필요" 2>/dev/null || true
 
@@ -812,6 +853,7 @@ jobs:
       #     이슈에 남은 심사 결과는 유효하므로 워크플로를 실패시키지 않는다.
       # ----------------------------------------------------------------------
       - name: Report score to leaderboard API
+        if: github.event_name == 'issues'
         continue-on-error: true
         env:
           API_ENDPOINT: ${{ secrets.AZURE_API_ENDPOINT }}
