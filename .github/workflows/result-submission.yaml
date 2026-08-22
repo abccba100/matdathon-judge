@@ -728,7 +728,9 @@ jobs:
         continue-on-error: true
         uses: actions/ai-inference@v3
         with:
-          model: gpt-4.1
+          # 비워두면 Copilot CLI 가 사용 가능한 기본 모델을 고른다.
+          # 특정 모델을 강제하려면 리포지토리 변수 JUDGE_MODEL 을 설정한다.
+          model: ${{ vars.JUDGE_MODEL }}
           system-prompt-file: system-prompt.txt
           prompt-file: prompt.txt
         env:
