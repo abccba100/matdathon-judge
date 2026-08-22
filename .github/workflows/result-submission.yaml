@@ -1,4 +1,4 @@
-name: Result Submission
+﻿name: Result Submission
 
 on:
   issues:
@@ -34,7 +34,6 @@ on:
 permissions:
   issues: write
   contents: read
-  models: read
 
 jobs:
   submit:
@@ -437,7 +436,6 @@ jobs:
     permissions:
       issues: write
       contents: read
-      models: read
 
     env:
       GH_TOKEN: ${{ github.token }}
@@ -489,11 +487,15 @@ jobs:
           echo "OWNER_REPO=$owner_repo" >> "$GITHUB_ENV"
 
           fetch() {
-              gh api "/repos/$owner_repo/contents/$1" \
+              # `-f` 만 쓰면 gh 가 POST 로 보내므로 --method GET 을 반드시 명시한다.
+              if gh api --method GET "/repos/$owner_repo/contents/$1" \
                   -f "ref=$COMMIT_HASH" \
-                  -H "Accept: application/vnd.github.raw" > "evidence/$1" 2>/dev/null \
-                  || : > "evidence/$1"
-              echo "$1: $(wc -c < "evidence/$1") bytes"
+                  -H "Accept: application/vnd.github.raw" > "evidence/$1" 2>/dev/null; then
+                  echo "$1: $(wc -c < "evidence/$1") bytes"
+              else
+                  : > "evidence/$1"
+                  echo "$1: 가져오지 못했습니다 (없거나 접근 불가)"
+              fi
           }
 
           fetch PRD.md
@@ -644,17 +646,106 @@ jobs:
           PY
 
       # ----------------------------------------------------------------------
-      # J5. GitHub Models 로 채점. GITHUB_TOKEN + `models: read` 권한만 필요하다.
+      # J5. 심사 백엔드 선택.
+      #     GitHub Models(models.github.ai)는 2026-07-30 자로 완전히 은퇴하여
+      #     사용할 수 없다. 다음 두 경로 중 설정된 것을 자동으로 고른다.
+      #       (a) azure   — Azure OpenAI (AZURE_OPENAI_ENDPOINT/KEY/DEPLOYMENT)
+      #       (b) copilot — GitHub Copilot CLI (COPILOT_GITHUB_TOKEN)
+      #     둘 다 없으면 채점을 건너뛰고 needs-review 로 표시한다.
       # ----------------------------------------------------------------------
-      - name: Run AI judge
-        id: ai
+      - name: Select judging backend
+        id: backend
+        env:
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          COPILOT_GITHUB_TOKEN:  ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          if [ -n "$AZURE_OPENAI_ENDPOINT" ]; then
+              kind=azure
+          elif [ -n "$COPILOT_GITHUB_TOKEN" ]; then
+              kind=copilot
+          else
+              kind=none
+              echo "::warning::심사 백엔드가 설정되지 않았습니다. AZURE_OPENAI_ENDPOINT 또는 COPILOT_GITHUB_TOKEN 시크릿을 등록하세요."
+          fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "심사 백엔드: $kind"
+
+      # --- (a) Azure OpenAI 경로 -------------------------------------------
+      - name: Run AI judge (Azure OpenAI)
+        id: ai_azure
+        if: steps.backend.outputs.kind == 'azure'
         continue-on-error: true
-        uses: actions/ai-inference@v1
+        env:
+          AZURE_OPENAI_ENDPOINT:   ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_KEY:        ${{ secrets.AZURE_OPENAI_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION }}
+        run: |
+          base="${AZURE_OPENAI_ENDPOINT%/}"
+          deployment="${AZURE_OPENAI_DEPLOYMENT:-gpt-4.1}"
+          api_version="${AZURE_OPENAI_API_VERSION:-2024-10-21}"
+
+          jq -n \
+              --rawfile system system-prompt.txt \
+              --rawfile user prompt.txt \
+              '{messages: [{role: "system", content: $system},
+                           {role: "user",   content: $user}],
+                temperature: 0.2,
+                max_tokens: 4000,
+                response_format: {type: "json_object"}}' > request.json
+
+          http_code=$(curl -sS -o azure-response.json -w '%{http_code}' \
+              --max-time 300 \
+              -X POST "$base/openai/deployments/$deployment/chat/completions?api-version=$api_version" \
+              -H "Content-Type: application/json" \
+              -H "api-key: $AZURE_OPENAI_KEY" \
+              --data-binary @request.json)
+
+          echo "HTTP $http_code"
+          if [ "$http_code" != "200" ]; then
+              echo "::error::Azure OpenAI 호출 실패 (HTTP $http_code)"
+              head -c 2000 azure-response.json
+              exit 1
+          fi
+
+          jq -r '.choices[0].message.content // empty' azure-response.json > ai-response.txt
+          echo "응답 길이: $(wc -c < ai-response.txt) bytes"
+
+      # --- (b) GitHub Copilot CLI 경로 --------------------------------------
+      - name: Setup Node
+        if: steps.backend.outputs.kind == 'copilot'
+        uses: actions/setup-node@v4
         with:
-          model: openai/gpt-4.1
+          node-version: '22'
+
+      - name: Install Copilot CLI
+        if: steps.backend.outputs.kind == 'copilot'
+        run: npm install -g @github/copilot
+
+      - name: Run AI judge (Copilot CLI)
+        id: ai_copilot
+        if: steps.backend.outputs.kind == 'copilot'
+        continue-on-error: true
+        uses: actions/ai-inference@v3
+        with:
+          model: gpt-4.1
           system-prompt-file: system-prompt.txt
           prompt-file: prompt.txt
-          max-tokens: 4000
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+
+      - name: Normalise Copilot response
+        if: steps.backend.outputs.kind == 'copilot'
+        continue-on-error: true
+        env:
+          RESPONSE_FILE: ${{ steps.ai_copilot.outputs.response-file }}
+        run: |
+          if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
+              cp "$RESPONSE_FILE" ai-response.txt
+              echo "응답 길이: $(wc -c < ai-response.txt) bytes"
+          else
+              echo "::warning::Copilot CLI 응답을 받지 못했습니다."
+          fi
 
       # ----------------------------------------------------------------------
       # J6. 응답 파싱 + 가중치 총점 계산. 점수 산술은 모델이 아니라 워크플로가
@@ -664,8 +755,7 @@ jobs:
       - name: Score and render report
         id: score
         env:
-          RESPONSE_FILE: ${{ steps.ai.outputs.response-file }}
-          AI_OUTCOME: ${{ steps.ai.outcome }}
+          BACKEND_KIND: ${{ steps.backend.outputs.kind }}
           DEPLOY_HTTP_CODE: ${{ steps.probe.outputs.http_code }}
           DEPLOY_REACHABLE: ${{ steps.probe.outputs.reachable }}
         run: |
@@ -684,10 +774,12 @@ jobs:
           MAX_SCORE = 5
 
           reachable = os.environ.get("DEPLOY_REACHABLE") == "true"
-          raw = ""
-          path = os.environ.get("RESPONSE_FILE", "")
-          if os.environ.get("AI_OUTCOME") == "success" and path and pathlib.Path(path).exists():
-              raw = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+          backend = os.environ.get("BACKEND_KIND", "none")
+
+          # 두 백엔드 모두 최종 응답을 ai-response.txt 로 통일해 기록한다.
+          response_path = pathlib.Path("ai-response.txt")
+          raw = response_path.read_text(encoding="utf-8", errors="replace") \
+              if response_path.exists() else ""
 
           def extract_json(text: str):
               text = text.strip()
@@ -724,7 +816,10 @@ jobs:
               elif judged_ok:
                   score, rationale = by_id[cid]
               else:
-                  score, rationale = 1, "심사 응답을 해석할 수 없어 임시로 최저점이 적용되었습니다. 사무국 확인이 필요합니다."
+                  score, rationale = 1, (
+                      "심사 백엔드가 설정되지 않아 채점하지 못했습니다. 사무국 확인이 필요합니다."
+                      if backend == "none" else
+                      "심사 응답을 해석할 수 없어 임시로 최저점이 적용되었습니다. 사무국 확인이 필요합니다.")
               weighted = score / MAX_SCORE * weight
               total += weighted
               rows.append((cid, name, score, weight, weighted, rationale))
@@ -746,7 +841,11 @@ jobs:
                            "핵심 기능이 인증 없이 공개 접근 가능해야 한다는 제출 규정에 따라 모든 항목에 최저점이 적용되었습니다.")
               lines.append("")
           elif not judged_ok:
-              lines.append("> ⚠️ 심사 모델의 응답을 정상적으로 해석하지 못했습니다. 사무국에 문의하세요.")
+              if backend == "none":
+                  lines.append("> ⚠️ 심사 백엔드(`AZURE_OPENAI_ENDPOINT` 또는 `COPILOT_GITHUB_TOKEN`)가 "
+                               "설정되지 않아 자동 채점을 수행하지 못했습니다. 사무국에 문의하세요.")
+              else:
+                  lines.append("> ⚠️ 심사 모델의 응답을 정상적으로 해석하지 못했습니다. 사무국에 문의하세요.")
               lines.append("")
           if data.get("prompt_injection_detected"):
               lines.append("> 🚨 제출물에서 프롬프트 인젝션 시도로 보이는 내용이 감지되어 해당 지시는 무시되었으며, "
@@ -811,7 +910,7 @@ jobs:
               ],
               "summary": str(data.get("summary", "")).strip(),
               "promptInjectionDetected": bool(data.get("prompt_injection_detected")),
-              "judgedBy": "github-models/openai/gpt-4.1",
+              "judgedBy": f"{backend}/gpt-4.1",
           }
           pathlib.Path("judgement.json").write_text(
               json.dumps(payload, ensure_ascii=False), encoding="utf-8")
