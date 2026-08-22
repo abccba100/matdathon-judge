@@ -846,8 +846,8 @@ jobs:
               '    {',
               '      "id": <항목 번호>,',
               '      "score": <1~5 정수>,',
-              '      "rationale": "실제 증거를 인용한 한국어 3~5문장 근거",',
-              '      "improvements": ["이 항목에서 점수를 올리려면 무엇을 해야 하는지, 한국어로 구체적으로", "..."]',
+              '      "rationale": "실제 증거를 인용한 한국어 2~4문장 근거",',
+              '      "improvements": ["점수를 올리려면 무엇을 해야 하는지 한 문장으로", "..."]',
               '    }',
               ("    ... id 1 부터 7 까지 7개 모두 ..." if cid == 0 else "    (담당 항목 1개만)"),
               '  ],',
@@ -866,7 +866,8 @@ jobs:
               context,
               "",
               task,
-              "improvements 에는 최소 2개, 최대 4개의 구체적이고 실행 가능한 개선 방안을 적으십시오.",
+              "improvements 에는 2~3개의 구체적이고 실행 가능한 개선 방안을 각각 한 문장으로 적으십시오.",
+              "rationale 은 2~4문장으로 간결하게 쓰십시오. 응답이 길어져 잘리면 무효 처리됩니다.",
               "응답은 '{' 로 시작해 '}' 로 끝나는 JSON 객체 하나여야 합니다. "
               "인사말, 요약, 코드펜스, 도구 사용 설명 등 JSON 이외의 텍스트를 절대 출력하지 마십시오.",
           ])
@@ -1002,6 +1003,42 @@ jobs:
                               yield text[start:i + 1]
                               start = -1
 
+          def repair_truncated(text):
+              """모델 응답이 토큰 한도로 잘려 닫는 괄호가 없는 경우를 복구한다.
+
+              실제로 관측된 가장 흔한 실패 유형이다. 열린 문자열/배열/객체를
+              순서대로 닫아 주면 점수와 근거 대부분을 살릴 수 있다.
+              """
+              start = text.find("{")
+              if start == -1:
+                  return None
+              s = text[start:]
+              stack, in_str, esc = [], False, False
+              for ch in s:
+                  if in_str:
+                      if esc:
+                          esc = False
+                      elif ch == "\\":
+                          esc = True
+                      elif ch == '"':
+                          in_str = False
+                      continue
+                  if ch == '"':
+                      in_str = True
+                  elif ch in "{[":
+                      stack.append(ch)
+                  elif ch in "}]":
+                      if stack:
+                          stack.pop()
+              if not stack and not in_str:
+                  return None          # 잘리지 않았다 — 복구할 것이 없다.
+              if in_str:
+                  s += '"'
+              s = re.sub(r",\s*$", "", s)
+              for ch in reversed(stack):
+                  s += "}" if ch == "{" else "]"
+              return s
+
           def extract_json(text):
               text = (text or "").strip()
               if not text:
@@ -1010,6 +1047,9 @@ jobs:
               candidates += [m.group(1).strip() for m in
                              re.finditer(r"```(?:json|JSON)?\s*(.*?)```", text, flags=re.S)]
               candidates += list(reversed(list(balanced_objects(text))))
+              repaired = repair_truncated(text)
+              if repaired:
+                  candidates.append(repaired)
               fallback = None
               for cand in candidates:
                   cand = cand.strip()
