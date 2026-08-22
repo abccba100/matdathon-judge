@@ -117,7 +117,7 @@ jobs:
           python3 - <<'PY'
           import os, re, json, pathlib
 
-          body = os.environ["BODY"].replace("\r\n", "\n")
+          body = os.environ["BODY"].replace("\r\n", "\n").lstrip("\ufeff")
 
           def section(heading: str) -> str:
               m = re.search(
