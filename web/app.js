@@ -181,7 +181,7 @@
     entries.forEach(function (entry, index) {
       els.body.appendChild(buildRow(entry, index + 1));
       if (openRows[entry.latest.number]) {
-        els.body.appendChild(buildDetailRow(entry.latest.number));
+        els.body.appendChild(buildDetailRow(entry.latest));
       }
     });
   }
@@ -246,12 +246,13 @@
   /* 렌더링 — 상세 (부족한 점 · 개선 방안)                                */
   /* ------------------------------------------------------------------ */
 
-  function buildDetailRow(number) {
+  function buildDetailRow(issue) {
+    var number = issue.number;
     var tr = el('tr', 'board-detail-row');
     var td = el('td');
     td.colSpan = 7;
 
-    var j = cache[number];
+    var j = cache[cacheKey(issue)];
 
     if (j === undefined) {
       td.appendChild(el('p', 'detail-loading', '심사 결과를 불러오는 중…'));
