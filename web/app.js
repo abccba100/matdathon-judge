@@ -338,11 +338,28 @@
           '이 항목에서 ' + lost.toFixed(1) + '점을 잃었습니다.'));
       }
 
+      // 항목 전담 에이전트가 낸 개선 방안을 그 항목 카드 안에 바로 붙인다.
+      if (s.improvements && s.improvements.length) {
+        var fix = el('div', 'detail-fix');
+        fix.appendChild(el('h4', null, '이렇게 개선하세요'));
+        var ul = el('ul');
+        s.improvements.forEach(function (t) { ul.appendChild(el('li', null, t)); });
+        fix.appendChild(ul);
+        card.appendChild(fix);
+      }
+
+      // 여러 표본을 합의한 경우 점수 분포를 함께 노출해 판정 근거를 투명하게 한다.
+      if (s.samples && s.samples.length > 1) {
+        card.appendChild(el('p', 'detail-samples',
+          '독립 심사 표본 ' + s.samples.length + '회: ' + s.samples.join(' · ') +
+          ' → 합의 ' + s.score));
+      }
+
       grid.appendChild(card);
     });
     td.appendChild(grid);
 
-    // 강점 / 개선 방안
+    // 강점 / 개선 방안 (단일 모드 응답 등 전역 목록이 있을 때만)
     var strengths = j.strengths || [];
     var improvements = j.improvements || [];
 

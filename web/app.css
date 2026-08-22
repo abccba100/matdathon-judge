@@ -295,6 +295,39 @@ html, body {
     margin-top: 0.5rem;
 }
 
+/* 항목 카드 안의 개선 방안 */
+.detail-fix {
+    margin-top: 0.7rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    background: rgba(250, 204, 21, 0.07);
+    border-left: 3px solid var(--status-eval);
+}
+
+.detail-fix h4 {
+    margin: 0 0 0.35rem;
+    font-size: 0.74rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--status-eval);
+}
+
+.detail-fix ul { margin: 0; padding-left: 1.1rem; }
+
+.detail-fix li {
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.detail-samples {
+    margin-top: 0.55rem;
+    font-size: 0.74rem;
+    letter-spacing: 0.02em;
+    color: var(--text-dim);
+}
+
 /* 강점 / 개선 방안 */
 .detail-lists {
     display: grid;
